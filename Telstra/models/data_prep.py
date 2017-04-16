@@ -2,12 +2,11 @@
     Function for initial data preparation
 """
 
+import pandas as pd
+import numpy as np
+
 
 def data_prep():
-
-    import pandas as pd
-    import numpy as np
-
     print("Reading data from csv...")
     # Read in data
     train_df = pd.read_csv('../input/train.csv')
@@ -22,29 +21,33 @@ def data_prep():
     """
     #################### Initial cleanup ############################
     """
-    # Turn locations into numbers
+    print("Manipulating raw data...")
+    print("  location")
+    # Turn locations into numbers, there are ~1000 locations, so keep as int
     train_df['location'] = train_df['location'].map(lambda x: int(x.strip("location ")))
     test_df['location'] = test_df['location'].map(lambda x: int(x.strip("location ")))
     test_df['fault_severity'] = -1
-
     # should just remove fault_severity from the picture...
 
-    print("Manipulating raw data...")
     print("  resource")
-    # Resource runs from 1-10 possible options
+    # Resource runs from 1-10 possible options and can have multiple per id
     resource_df['resource_type'] = resource_df['resource_type'].map(lambda x: int(x.strip("resource_type ")))
     resource_df['resource_type_int'] = resource_df['resource_type']
     resource_df = pd.get_dummies(resource_df, columns=['resource_type'])
+    # bring together resources to one entry per id
     resource_df = resource_df.groupby('id', as_index=False).aggregate(np.sum)
+    # Create total for resources in case this has meaning
     resource_df['resource_type_total'] = resource_df.ix[:, resource_df.columns != 'id'].sum(axis=1)
-    ##
+    # Find the most frequent value for a given id
     resource_df_2 = resource_df.drop(['id', 'resource_type_total', 'resource_type_int'], axis=1)
     arank = resource_df_2.apply(np.argsort, axis=1)
     ranked_cols = resource_df_2.columns.to_series()[arank.values[:, ::-1][:, :1]]
     new_frame = pd.DataFrame(ranked_cols, index=resource_df_2.index)
     new_frame = new_frame.applymap(lambda x: int(x.strip("resource_type_")))
     new_frame.columns = ['resource_1st']
+    # add these back to the original frame
     resource_df = pd.concat([resource_df, new_frame], axis=1)
+    # clean up excess resources
     del new_frame
     del resource_df_2
 
@@ -86,6 +89,7 @@ def data_prep():
     # Events 50 options
     event_df['event_type'] = event_df['event_type'].map(lambda x: int(x.strip("event_type ")))
     event_df['event_type_int'] = event_df['event_type']
+    # convert to categorical
     event_df = pd.get_dummies(event_df, columns=['event_type'])
     event_df = event_df.groupby('id', as_index=False).aggregate(np.sum)
     event_df['event_type_total'] = event_df.ix[:, event_df.columns != 'id'].sum(axis=1)
@@ -108,16 +112,15 @@ def data_prep():
     severity_df = pd.get_dummies(severity_df, columns=['severity_type'])
 
     print("Joining data...")
-    # Join data
+    # Join train and test
+    train_df['train/test'] = 'train'
+    test_df['train/test'] = 'test'
     all_df = pd.concat([train_df, test_df])
-    all_df['train/test'] = 'train'
-    # fix maybe index = n-train
-    all_df['train/test'][n_train:] = 'test'
-
+    # Bring all the extra data
     merged_df = pd.merge(feature_df, resource_df, how='outer', on='id')
     merged_df = pd.merge(merged_df, severity_df, how='outer', on='id')
     merged_df = pd.merge(merged_df, event_df, how='outer', on='id')
-
+    # Final stage
     all_df = pd.merge(all_df, merged_df, how='outer', on='id')
     """
     ########################### Feature Generation #########################################
@@ -125,10 +128,10 @@ def data_prep():
     # Number of incindences at location (including test values)
     location_x_id = all_df.groupby('location').id.nunique()
     all_df['n_inst_all'] = all_df.location.map(lambda x: location_x_id[x])
-
+    # set index to id and drop the column
     all_df.index = all_df['id']
     all_df = all_df.drop('id', axis=1)
-
+    # send data to csv for later use
     print("Writing data...")
     all_df.to_csv('../input/all_df_prep.csv')
 

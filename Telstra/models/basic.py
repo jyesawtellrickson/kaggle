@@ -75,4 +75,3 @@ open_file_object = csv.writer(predictions_file)
 open_file_object.writerow(["id", "predict_0", "predict_1", "predict_2"])
 open_file_object.writerows(zip(id_test, y_pred[:, 0], y_pred[:, 1], y_pred[:, 2]))
 predictions_file.close()
-

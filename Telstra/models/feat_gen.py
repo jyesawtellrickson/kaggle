@@ -1,12 +1,14 @@
 """
-    Feature Generation file
+Feature Generation file
+
+Create new features to help the model.
+Use PCA to condense.
 """
 
+import pandas as pd
+import data_prep
 
 def feat_gen():
-
-    import pandas as pd
-    import data_prep
 
     print("Reading in data...")
     # Data preparation
@@ -17,11 +19,13 @@ def feat_gen():
         data_prep.data_prep()
         all_df = pd.read_csv('../input/all_df_prep.csv', index_col='id')
     """
-    ################################################ Feature Generation ################################################
+    ############################## Feature Generation ##################################
     """
     print("Generating features...")
     #
-    # Defence is about how much they reacted to the incidence,  low indicates strong reaction
+    # Defence is about how much they reacted to the incidence,
+    # low indicates strong reaction. This might reveal hidden
+    # data about the severity of the events.
     all_df['defence_1'] = all_df['event_type_total'] / all_df['resource_type_total']
     all_df['defence_2'] = all_df['log_feature_total'] / all_df['resource_type_total']
     all_df['defence_3'] = all_df['feature_unique'] / all_df['resource_type_total']

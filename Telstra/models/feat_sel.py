@@ -1,19 +1,19 @@
-"""Feature Selection file
+"""
+Feature Selection file
 
 Chooses the best features to use in the model.
 """
 
+import pandas as pd
+import numpy as np
+import xgboost as xgb
+import data_prep
+import feat_gen
+
 
 def feat_sel():
-
-    import pandas as pd
-    import numpy as np
-    import xgboost as xgb
-    import data_prep
-    import feat_gen
-
     print("Reading data...")
-    # Attempt to open pandas and if fail rerun data prep
+    # Attempt to open pandas and if fail rerun dataSprep and feat_gen
     try:
         all_df = pd.read_csv('../input/all_df_gen.csv', index_col='id')
     except OSError:
@@ -25,11 +25,10 @@ def feat_sel():
     ###################### Feature Selection ############################
     """
     print("Selecting features...")
-
-    # Initially remove known bad features
+    # Initially remove known bad features from previous runs
     #all_df = all_df.drop(['event_type_int','event_type_total', 'feature_spread'],axis=1)
-    all_df = all_df.drop(['k_means_cat_1'],axis=1)
-    ##### Should really be training with other columns included, just not iterated ove0
+    all_df = all_df.drop(['k_means_cat_1'], axis=1)
+    ##### Should really be training with other columns included, just not iterated over
     # Find out the features that can be excluded from the removal process
     exclude_feat = ['log_feature_','event_type_','resource_type_','severity_type_']
     exclude_feat.append('defence_2')
@@ -41,15 +40,17 @@ def feat_sel():
         for i in range(1, exclude_feat_num[idx]+1):
             exclude_feat_idx.append(feat+str(i))
         include_feat = list(set(include_feat) - set(exclude_feat_idx))
+    # also remove the other columns
+    include_feat = list(set(include_feat)-{'train/test', 'fault_severity'})
 
-    include_feat = list(set(include_feat)-set(['train/test', 'fault_severity']))
-
-    # Remove known *good* features so that the model is needlessly run
-    good_feat = ['location','n_inst_all','resource_1st','log_feature_total','defence_3','resource_1st','defence_1',
-                 'feature_unique','feat_1st','feat_2nd','feat_3rd','event_type_int']
-
+    # Remove known *good* features from testing
+    # so that the model is not run on these
+    good_feat = ['location', 'n_inst_all', 'resource_1st', 'log_feature_total',
+                 'defence_3', 'resource_1st','defence_1', 'feature_unique',
+                 'feat_1st', 'feat_2nd', 'feat_3rd', 'event_type_int']
     include_feat = list(set(include_feat)-set(good_feat))
 
+    # prepare data for testing
     train_df = all_df[all_df['train/test'] == 'train'].drop(['train/test', 'fault_severity'], axis=1)
     y_train = all_df[all_df['train/test'] == 'train']['fault_severity'].values.astype(int)
 
@@ -67,7 +68,7 @@ def feat_sel():
         # Train model
         # this is effectively early stopping as you're finding the best round from cv
         best_cvs = []
-        # iterate through available features, try removing one and runnig model
+        # iterate through available features, try removing one and running model
         print("Testing ", len(include_feat), " features.")
         for feat in include_feat:
             X_test = train_df.drop(feat,axis=1).values
