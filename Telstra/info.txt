@@ -1,0 +1,240 @@
+Severity has 18,552 unique ids
+	severity_type
+Resource has 21,076 entries as some can have multiple resource types
+	resource_type
+Feature has 58,671
+	volume
+	log_feature
+Event has 31,170
+	event_type
+	
+
+
+18,552 unique events (both train and test)
+
+1,126 unique locations
+
+
+We can try to predict, purely on location, or we can predict using location AND id.
+
+Note that we have access to all of the locations/ids so we should check count of locations in test set too.
+
+
+What is my cross-validation set?
+Are there unique locations in the test set?
+
+929 training locations
+1038 testing locations
+Therefore some missing
+
+
+
+
+0    4784
+1    1871
+2     726
+
+
+resource_type_total     1     2    3   4  5
+fault_severity
+0                    4378   345   46  11  4
+1                    1501   306   57   4  3
+2                     624    74   13  11  4
+target               9918  1089  141  18  5
+
+- suggests that lack of resources leads to high fault
+
+Initial result of 0.375 raw differences 
+
+By performing class prediction instead, this is greatly reduced to 0.2508
+
+At a given location you get events (tagged with ids):
+
+
+Severity threat is a user.
+
+	severity_type
+	resource_type
+	volume
+	log_feature
+	event_type
+	
+Each row in the dataset represents a location and a time point (id).
+This corresponds to a (severity_type) of 1-5 from the log for each time point(id)
+	At each time point, the log contained certain numbers of each feature (feature and volume)
+	As well as multiple event_types and resource_types
+ 
+Each row in the dataset represents a location and a time point (id).
+This corresponds to a (severity_type) of 1-5 from the log for each time point(id)
+A group of resource_types required to fix the scenario
+	At each time point, the log contained certain numbers of each feature (feature and volume)
+	As well as multiple event_types
+		
+
+# need to work out some way to relate locations so that we can group them
+# maybe we can apply a k-means classification first.
+# we need to group locations together, otherwise we're just classifying ids
+
+K Means clustering of location.
+Need to choose two dimensions to plot on or use pca to reduce to two dimensions
+Retried using 3 dimensions on pca, default approx 5 cats
+variance explained: 0.321, 0.267, 0.158 = 0.746
+
+Summed across location and now have much better results. With just 1000 or so entries we can
+run PCA for entire group. Locations definitely seem to have a distribution
+## check location isn't somehow slipping in there
+The locations are sorted into 4 groups, these groups seem roughly to correspond to some numerical
+significance. Quite important!
+
+
+# Location specific features, e.g. most common event at location
+These seem to cause big issues with overfitting local vs leaderboard
+# conditional probabilities?
+# eg. probability site
+
+Location Clustering based on Fault Severity level : CV : ~0.49 Test set :0.518
+
+
+
+id is very bad for the score
+
+
+
+More than 1 row:
+NO FEATURES		0.573
+number_ids		0.551
+resource dummy		0.545
+resource agg/total	0.528
+event dummy and agg/tot	0.555
+n_ids event total*reso	0.575
+above*count of id	0.549
+feature dummy		0.569
+-----------
+			0.602
+-----------
+add number ids		0.595
+-----------
+			0.598
+-----------
+remove dummies -res	0.551
+----------
+avg mult row		0.693
+-----------
+inc no. rnds to 1000	0.563/0.529
+early stopp, keep val	0.529
+
+STARTED USING INBUILT CV
+initial			0.545 rd34
+---------------
+			0.560
+--------------
+cnt 0,1,2 by loc	0.540
+fixed tot sev		0.540
+
+incl. sever ratio	0.476	r23
+------------
+			0.718		<------ something is overfitting?
+-------------
+
+no crafted		0.547
+add n_ints_x		0.465
+n_inst_all		0.540
+resource_int		0.539
+all_int			0.529
+n_ids			0.532	26
+----------------
+			0.552 	26
+----------------
+rand_seed=0 		0.529
+upd feat, *vol		0.519
+---------------
+			0.518
+----------------
+feat uniq + spre	0.512
+top 3 log_feat int	0.511	29
+------------------
+			0.519
+---------------
+fix res_tot, top res	0.508	33
+fix even_tot,		0.508
+add 1st evt, rm int	0.511	33
+rm 1st event...		0.510	27
+add back event_int	0.508	33
+-------------
+			0.518
+----------------
+add res_int back	0.512	23
+rm top res		0.511
+add res back, fix evto	0.510	37
+not sub from evto	0.510	24
+standard, norm		0.510	37
+????????????????????????????????????????????????
+add defense var		0.513	23
+only def2		0.513
+rem all			0.510	35
+add n_ids		0.512	27
+added k_means 3-7	0.512	24
+rm abv use dummies on 3	0.512
+
+before location inf	0.510	35	
+add location inf	0.513
+--------------------
+			0.518	
+--------------------
+rm location cluster	0.510
+-------------------
+			0.5178	marginally better leaderboard CV but local CV is much better
+-------------------
+add id groupings	0.51058 vs 0.5096
+remove ids		0.5101
+------------------
+			0.51916
+------------------
+remove id grouping	0.50355
+-----------------
+			0.50944  <---------- massive improvement!
+------------------
+remove event_type	0.5053
+add event_type back	0.5062
+add feat back		0.5063
+all feats back, sel run	0.50851
+include every man feat	0.5044
+rm k_means_cat_1	0.5037
+-------------------
+			0.51291
+------------------
+running through test	0.5050
+tree depth 6		0.5013
+-----------------
+			0.51048
+-----------------
+depth 6			0.5020
+depth 8			0.5111
+depth 7			0.5079
+----------
+			0.51315
+-------------
+depth 10 		0.51696
+------------
+			0.52299
+----------
+
+045143667 
+
+
+
+crossed location and n_inst_all
+Features cleaned:  ['defence_2', 'af0/0', 'af0-0']
+af1+0,af1x0,af0x0 can all go to
+
+
+
+
+
+
+
+
+
+
+
+

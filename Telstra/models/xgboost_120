@@ -1,0 +1,245 @@
+"""
+XGBoost model for first attempt.
+"""
+
+import pandas as pd
+import numpy as np
+import xgboost as xgb
+import matplotlib
+import csv
+
+train_df = pd.read_csv('../input/train.csv')
+test_df = pd.read_csv('../input/test.csv')
+severity_df = pd.read_csv('../input/severity_type.csv')
+resource_df = pd.read_csv('../input/resource_type.csv')
+feature_df = pd.read_csv('../input/log_feature.csv')
+event_df = pd.read_csv('../input/event_type.csv')
+
+n_train = train_df.shape[0]
+
+#################### Initial cleanup ############################
+
+# Turn severity types into numbers
+train_df['location'] = train_df['location'].map(lambda x: int(x.strip("location ")))
+test_df['location'] = test_df['location'].map(lambda x: int(x.strip("location ")))
+test_df['fault_severity'] = 'target'
+
+
+# Resource runs from 1-10 possible options
+resource_df['resource_type'] = resource_df['resource_type'].map(lambda x: int(x.strip("resource_type ")))
+resource_df = pd.get_dummies(resource_df, columns=['resource_type'])
+resource_df = resource_df.groupby('id',as_index=False).aggregate(np.sum)
+resource_df['resource_type_total'] = resource_df.ix[:, resource_df.columns != 'id'].sum(axis=1)
+##
+resource_df_2 = resource_df.drop(['id','resource_type_total'],axis=1)
+arank = resource_df_2.apply(np.argsort, axis=1)
+ranked_cols = resource_df_2.columns.to_series()[arank.values[:,::-1][:,:1]]
+new_frame = pd.DataFrame(ranked_cols, index=resource_df_2.index)
+new_frame = new_frame.applymap(lambda x: int(x.strip("resource_type_")))
+new_frame.columns = ['1st']
+resource_df = pd.concat([resource_df, new_frame],axis=1)
+del new_frame
+del resource_df_2
+
+
+# Feature LOTS of options
+feature_df['log_feature'] = feature_df['log_feature'].map(lambda x: int(x.strip("feature ")))
+# create column with the log feature as int
+#feature_df['log_feature_int'] = feature_df['log_feature']
+# create secondary df for manipulation
+feature_df_2 = feature_df.drop(['id'],axis=1) # logfeatint
+# convert features to OHE
+feature_df_2 = pd.get_dummies(feature_df_2, columns=['log_feature'])
+# multiply through by the volume
+feature_df_2['volume'] = feature_df_2['volume'].astype(int)
+feature_df_2 = feature_df_2.mul(feature_df_2['volume'], axis=0)
+# remove the volume now
+feature_df_2 = feature_df_2.drop('volume',axis=1)
+# bring the id's into df to join back up
+feature_df_2['id'] = feature_df['id']
+# apply the groupby to get numbers of each event
+feature_df_2 = feature_df_2.groupby('id',as_index=False).aggregate(np.sum)
+feature_df_2['log_feature_total'] = feature_df_2.ix[:, feature_df_2.columns != 'id'].sum(axis=1)
+feature_df = feature_df_2
+# Should calculate the most common features (top 3)
+feature_df_2 = feature_df_2.drop(['id','log_feature_total'],axis=1)
+arank = feature_df_2.apply(np.argsort, axis=1)
+ranked_cols = feature_df_2.columns.to_series()[arank.values[:,::-1][:,:3]]
+new_frame = pd.DataFrame(ranked_cols, index=feature_df_2.index)
+new_frame = new_frame.applymap(lambda x: int(x.strip("log_feature_")))
+new_frame.columns = ['1st','2nd','3rd']
+# number of different features recorded for id
+feature_df['feature_unique'] = feature_df[feature_df > 0].count(axis=1) - 2 # take 1 for id and log_feature_total
+feature_df['feature_spread'] = feature_df['log_feature_total'] / feature_df['feature_unique']
+## investigate this further!!
+feature_df = pd.concat([feature_df, new_frame],axis=1)
+del feature_df_2
+
+
+
+# Events 50 options
+event_df['event_type'] = event_df['event_type'].map(lambda x: int(x.strip("event_type ")))
+event_df['event_type_int'] = event_df['event_type']
+event_df = pd.get_dummies(event_df, columns=['event_type'])
+event_df = event_df.groupby('id',as_index=False).aggregate(np.sum)
+event_df['event_type_total'] = event_df.ix[:, event_df.columns != 'id'].sum(axis=1)
+event_df['event_type_total'] = event_df['event_type_total'] - event_df['event_type_int']
+#
+"""
+event_df_2 = event_df.drop(['id','event_type_total'],axis=1)
+arank = event_df_2.apply(np.argsort, axis=1)
+ranked_cols = event_df_2.columns.to_series()[arank.values[:,::-1][:,:1]]
+new_frame = pd.DataFrame(ranked_cols, index=event_df_2.index)
+new_frame = new_frame.applymap(lambda x: int(x.strip("event_type_")))
+new_frame.columns = ['1st']
+event_df = pd.concat([event_df, new_frame],axis=1)
+del event_df_2
+del new_frame
+"""
+
+# convert severity count into categories 1-5
+severity_df['severity_type'] = severity_df['severity_type'].map(lambda x: int(x.strip("severity_type ")))
+severity_df = pd.get_dummies(severity_df, columns=['severity_type'])
+
+all_df = pd.concat([train_df, test_df])
+all_df['train/test'] = 'train'
+all_df['train/test'][n_train:] = 'test'
+
+merged_df = pd.merge(feature_df, resource_df, how='outer', on='id')
+merged_df = pd.merge(merged_df, severity_df, how='outer', on='id')
+merged_df = pd.merge(merged_df, event_df, how='outer', on='id')
+
+all_df = pd.merge(all_df, merged_df, how='outer', on='id')
+
+########################### Feature Generation #########################################
+# Number of incindences at location (including test values)
+location_x_id = all_df.groupby('location').id.nunique()
+all_df['n_inst_all'] = all_df.location.map(lambda x: location_x_id[x])
+# counts of each type of severity, -1 as we have added dummy value 'target'
+# for each id and location, we want the count of fault_severity 0, 1, 2 that occurred at that location
+#for i in all_df.fault_severity.unique().tolist()[:-1]:
+#    location_x_id = all_df[all_df['fault_severity'] == i].groupby('location').id.nunique()
+#    all_df['n_inst_'+str(i)] = all_df.location.map(lambda x: location_x_id[x] if x in location_x_id else 0)
+# Need lots of spaces after for loop
+# Total number of instances
+#all_df['n_inst'] = all_df['n_inst_0'] + all_df['n_inst_1'] + all_df['n_inst_2']
+# need to work out some way to relate locations so that we can group them
+# maybe we can apply a k-means classification first.
+
+# use int features, then remove if not improving
+
+
+# mechanically create features, log * +
+
+# appply feature selection
+
+# ratio of resources to events
+# Ratios between eatures
+# Defence is about how much they reacted to the incidence,  low indicates strong reaction
+#all_df['defence_1'] = all_df['event_type_total'] / all_df['resource_type_total']
+#all_df['defence_2'] = all_df['log_feature_total'] / all_df['resource_type_total']
+#all_df['defence_3'] = all_df['feature_unique'] / all_df['resource_type_total']
+#all_df['defence_4'] = all_df['severity_type'] / all_df['resource_type_total']
+
+
+# conditional probability by dividing by total types
+
+# Use multiplicative features, volume inc.
+#all_df['n_ids'] = all_df['resource_type_total'] * all_df['event_type_total'] * all_df['feature_type_total'] * \
+#                  all_df['n_inst_all']
+#
+
+"""
+total_incidents = all_df.fault_severity.value_counts().sum()
+total_train_incidents = all_df.fault_severity.value_counts().sum() - all_df.fault_severity.value_counts()['target']
+prob_severity = [0, 0, 0]
+for i in range(0, 3):
+    prob_severity[i] = all_df.fault_severity.value_counts()[i] / total_train_incidents
+
+
+
+
+#
+# Most common event
+#
+# Ratio between events
+# If divisor is 0, then assume average value
+#all_df['n_inst_0/1'] = (all_df['n_inst_0']+prob_severity[0]) / (all_df['n_inst_1']+prob_severity[1])
+#all_df['n_inst_0/2'] = (all_df['n_inst_0']+prob_severity[0]) / (all_df['n_inst_2']+prob_severity[2])
+#all_df['n_inst_1/2'] = (all_df['n_inst_1'] + prob_severity[1]) / (all_df['n_inst_2']+prob_severity[2])
+
+#all_df['']
+"""
+# use the time that the incidents were generated to create features
+
+# Location specific features, e.g. most common event at location
+
+
+#using pairwise addiition,substraction and multiplication of variables which are highly correlated with target
+
+# conditional probabilities?
+# eg. probability site
+
+# use t-SNE to check locations and times
+# common events, 1st, 2nd and 3rd
+# combine events df to be unique id
+
+# Are people automatically submitting?
+
+# Use PCA / dimensional reduction
+
+########################### Validation and Refinement #################################
+#
+#
+# VALIDATION SET
+# Create validation set, start by choosing random values
+# Should really be trying to mimic the testing set, e.g. some locations not trained
+# Can we use visualisation and work out how the set was chosen
+#
+# Define x and y values
+X_train = all_df[all_df['train/test'] == 'train'].drop(['train/test', 'fault_severity'], axis=1).values
+X_test = all_df[all_df['train/test'] == 'test'].drop(['train/test','fault_severity'], axis=1).values
+y_train = all_df[all_df['train/test'] == 'train']['fault_severity'].values
+id_test = all_df[all_df['train/test'] == 'test']['id'].values
+#
+# Generate training data
+dtrain = xgb.DMatrix(X_train, label=y_train)
+dtest = xgb.DMatrix(X_test)
+#
+# original eta = 0.3, max_depth = 6
+# Set xgboost paramaters
+param = {'eta': 0.3, 'silent': 1, 'objective': 'multi:softprob', 'max_depth': 8, 'eval_metric': 'mlogloss'}
+param['nthread'] = 4
+param['num_class'] = 3
+param_list = list(param.items())
+#
+# Train model
+# this is effectively early stopping as you're finding the best round from cv
+num_round = 1000
+cv_error = xgb.cv(param, dtrain, num_round, nfold=5, early_stopping_rounds=30,seed=0)
+print("CV Error: ", cv_error['test-mlogloss-mean'][-1:])
+#
+num_round = cv_error.shape[0]
+bst = xgb.train(param_list, dtrain, num_round)
+#
+#
+######################## Training ##########################
+# Get ids of test set
+
+# Predict
+y_pred = bst.predict(dtest)
+
+########################### Post process ################################
+#
+# Plot results
+#xgb.plot_importance(bst)
+
+
+# Output results
+predictions_file = open("submission.csv", "w")
+open_file_object = csv.writer(predictions_file)
+open_file_object.writerow(["id", "predict_0","predict_1","predict_2"])
+open_file_object.writerows(zip(id_test, y_pred[:,0], y_pred[:,1], y_pred[:,2]))
+predictions_file.close()
+
+
