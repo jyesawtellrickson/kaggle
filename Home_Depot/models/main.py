@@ -9,6 +9,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import FeatureUnion
 from sklearn.decomposition import TruncatedSVD
 # from sklearn.feature_extraction.text import CountVectorizer, TfidfTransformer
+# from sklearn.ensemble import RandomForestRegressor, BaggingRegressor
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import mean_squared_error, make_scorer
 # from nltk.metrics import edit_distance
@@ -18,6 +19,7 @@ import re
 # import enchant
 import random
 from util import *
+# impotr xgboost as xgb
 
 start_time = time.time()
 random.seed(2016)
@@ -129,12 +131,25 @@ df_train = df_all.iloc[:num_train]
 df_test = df_all.iloc[num_train:]
 id_test = df_test['id']
 y_train = df_train['relevance'].values
-X_train =df_train[:] # shouldn't you remove relevance here?
-X_test = df_test[:]
+X_train =df_train[:] # shouldn't you remove relevance here? .values
+X_test = df_test[:] # .values for other model
 
 print("--- Features Set: %s minutes ---" % round(((time.time() - start_time)/60),2))
 
 y_pred = trainer(X_train, y_train, X_test)
+
+"""
+# Old prediction
+RMSE  = make_scorer(fmean_squared_error, greater_is_better=False)
+rfr = RandomForestRegressor()
+model = rfr
+model.fit(X_train, y_train)
+
+y_pred = model.predict(X_test)
+print(len(y_pred))
+y_pred = np.round(y_pred).astype(int)+1
+"""
+
 
 pd.DataFrame({"id": id_test, "relevance": y_pred}).to_csv('../output/submission.csv', index=False)
 
