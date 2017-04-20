@@ -13,8 +13,6 @@ from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import mean_squared_error, make_scorer
 # from nltk.metrics import edit_distance
-from nltk.stem.porter import *
-# from nltk.stem.snowball import SnowballStemmer
 import re
 # import enchant
 import random
@@ -23,9 +21,6 @@ from util import *
 
 start_time = time.time()
 random.seed(2016)
-stemmer = PorterStemmer()
-# stemmer = SnowballStemmer('english') #0.003 improvement but takes twice as long as PorterStemmer
-
 
 
 df_train = pd.read_csv('../input/train.csv', encoding="ISO-8859-1") #update here
@@ -38,10 +33,6 @@ df_all = pd.concat((df_train, df_test), axis=0, ignore_index=True)
 df_all = pd.merge(df_all, df_pro_desc, how='left', on='product_uid')
 df_all = pd.merge(df_all, df_brand, how='left', on='product_uid')
 print("--- Files Loaded: %s minutes ---" % round(((time.time() - start_time)/60),2))
-
-stop_w = ['for', 'xbi', 'and', 'in', 'th','on','sku','with','what','from','that','less','er','ing'] #'electr','paint','pipe','light','kitchen','wood','outdoor','door','bathroom'
-strNum = {'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4,
-          'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9}
 
 
 RMSE  = make_scorer(fmean_squared_error, greater_is_better=False)
