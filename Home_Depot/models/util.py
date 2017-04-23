@@ -180,6 +180,7 @@ def str_whole_word(str1, str2, i_):
             i_ += len(str1)
     return cnt
 
+
 def fmean_squared_error(ground_truth, predictions):
     fmean_squared_error_ = mean_squared_error(ground_truth, predictions)**0.5
     return fmean_squared_error_
@@ -188,10 +189,13 @@ def fmean_squared_error(ground_truth, predictions):
 class cust_regression_vals(BaseEstimator, TransformerMixin):
     def fit(self, x, y=None):
         return self
+
     def transform(self, hd_searches):
-        d_col_drops=['id','relevance','search_term','product_title','product_description','product_info','attr','brand']
-        hd_searches = hd_searches.drop(d_col_drops,axis=1).values
+        d_col_drops = ['id', 'relevance', 'search_term', 'product_title',
+                     'product_description', 'product_info', 'attr', 'brand']
+        hd_searches = hd_searches.drop(d_col_drops, axis=1).values
         return hd_searches
+
 
 class cust_txt_col(BaseEstimator, TransformerMixin):
     def __init__(self, key):
@@ -203,14 +207,29 @@ class cust_txt_col(BaseEstimator, TransformerMixin):
 
 
 def trainer(X_train, y_train, X_test):
+    '''
+    Trainer to predict the product-search relevance.
+
+    :param X_train: training data numpy array
+    :param y_train: training solutions numpy array
+    :param X_test: test data numpy array
+    :return: prediction results numpy array
+    '''
     if __name__ == '__main__':
         rfr = RandomForestRegressor(n_estimators=500, n_jobs=-1, random_state=2016, verbose=1)
+        # calculate tf-idf values for n-gram 1
         tfidf = TfidfVectorizer(ngram_range=(1, 1), stop_words='english')
+        # perform singular value decomposition
         tsvd = TruncatedSVD(n_components=10, random_state=2016)
+        # use root mean square error to evaluate
+        RMSE  = make_scorer(fmean_squared_error, greater_is_better=False)
+        # generate a pipeline to perform transformations
         clf = pipeline.Pipeline([
                 ('union', FeatureUnion(
                             transformer_list=[
+                                # first get all the calculated features
                                 ('cst',  cust_regression_vals()),
+                                # generate the tfidf features and perform tsvd
                                 ('txt1', pipeline.Pipeline([('s1', cust_txt_col(key='search_term')),
                                                             ('tfidf1', tfidf), ('tsvd1', tsvd)])),
                                 ('txt2', pipeline.Pipeline([('s2', cust_txt_col(key='product_title')),
@@ -230,15 +249,18 @@ def trainer(X_train, y_train, X_test):
                         n_jobs=-1
                         )),
                 ('rfr', rfr)])
+        # we will now perform grid search to find the best parameters for this model
         param_grid = {'rfr__max_features': [10], 'rfr__max_depth': [20]}
-        model = grid_search.GridSearchCV(estimator = clf, param_grid = param_grid, n_jobs = -1, cv = 2, verbose = 20, scoring=RMSE)
+        model = grid_search.GridSearchCV(estimator=clf, param_grid=param_grid,
+                                         n_jobs=-1, cv=2, verbose=20, scoring=RMSE)
+        # fit model with best parameters
         model.fit(X_train, y_train)
-        #
+        # print
         print("Best parameters found by grid search:")
         print(model.best_params_)
         print("Best CV score:")
         print(model.best_score_)
         print(model.best_score_ + 0.47003199274)
-        #
+        # return the final prediction
         return model.predict(X_test)
 

@@ -23,6 +23,8 @@ start_time = time.time()
 random.seed(2016)
 
 
+## Read Data
+
 df_train = pd.read_csv('../input/train.csv', encoding="ISO-8859-1") #update here
 df_test = pd.read_csv('../input/test.csv', encoding="ISO-8859-1") #update here
 df_pro_desc = pd.read_csv('../input/product_descriptions.csv') #update here
@@ -34,12 +36,6 @@ df_all = pd.merge(df_all, df_pro_desc, how='left', on='product_uid')
 df_all = pd.merge(df_all, df_brand, how='left', on='product_uid')
 print("--- Files Loaded: %s minutes ---" % round(((time.time() - start_time)/60),2))
 
-
-RMSE  = make_scorer(fmean_squared_error, greater_is_better=False)
-
-#comment out the lines below use df_all.csv for further grid search testing
-#if adding features consider any drops on the 'cust_regression_vals' class
-#*** would be nice to have a file reuse option or script chaining option on Kaggle Scripts ***
 
 ## Data Processing
 
@@ -116,8 +112,8 @@ df_all.to_csv('../input/df_all.csv')
 
 ## Prediction
 
-#df_all = pd.read_csv('df_all.csv', encoding="ISO-8859-1", index_col=0)
-#num_train = df_all['relevance'].count()
+# df_all = pd.read_csv('df_all.csv', encoding="ISO-8859-1", index_col=0)
+# num_train = df_all['relevance'].count()
 df_train = df_all.iloc[:num_train]
 df_test = df_all.iloc[num_train:]
 id_test = df_test['id']
